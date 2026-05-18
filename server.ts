@@ -25,45 +25,71 @@ async function startServer() {
   // API Routes
   app.post("/api/rate-ig", async (req, res) => {
     try {
-      const { images } = req.body; // Array of base64 image data
+      const { images } = req.body; // Array of data URLs
 
       if (!images || images.length === 0) {
         return res.status(400).json({ error: "No images provided" });
       }
 
-      const prompt = `
+      const systemInstruction = `
         Bertindaklah sebagai seorang Instagram Expert, Creative Director, dan Fotografer Profesional. 
         Analisis screenshot profil dan feeds Instagram ini. Berikan penilaian yang detail, objektif, 
-        namun tetap santai dengan struktur berikut:
-
-        1. First Impression (Kesan Pertama): Apa vibes utama dari akun ini saat pertama kali dilihat? 
-        2. Bio & Profile Picture Review: Penilaian apakah fotonya menarik dan bionya informatif/menjual.
-        3. Feed Aesthetic & Color Palette: Nilai kerapian feeds, pencahayaan foto, dan konsistensi warna.
-        4. Score Akhir: Rating skala 1-10 beserta alasannya.
-        5. Pro Tips: 3 saran konkret agar akun terlihat lebih estetik atau profesional.
-
-        Gunakan bahasa anak muda Indonesia yang santai, gunakan emoji secukupnya, dan hindari bahasa kaku.
-        Kembalikan respon dalam format JSON yang valid dengan field: 
-        firstImpression, bioReview, feedAesthetic, finalScore, finalScoreReason, proTips (array of string).
+        namun tetap santai. Gunakan bahasa anak muda Indonesia yang santai (Gue/Lo atau santai saja), 
+        gunakan emoji secukupnya, dan hindari bahasa kaku.
       `;
 
-      const contents = {
-        parts: [
-          ...images.map((img: string) => ({
+      const prompt = `
+        Analisis profil IG ini dan kembalikan respon dalam format JSON yang valid dengan field: 
+        1. firstImpression: Kesan pertama (vibes utama).
+        2. bioReview: Penilaian foto profil dan bio.
+        3. feedAesthetic: Nilai kerapian feeds, pencahayaan, dan konsistensi warna.
+        4. finalScore: Rating angka 1-10.
+        5. finalScoreReason: Alasan singkat score tersebut.
+        6. proTips: Array berisi 3 saran konkret.
+      `;
+
+      const parts = images.map((img: string) => {
+        const match = img.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          return {
             inlineData: {
-              mimeType: "image/jpeg",
-              data: img.split(',')[1] || img // handle data-url or raw base64
+              mimeType: match[1],
+              data: match[2]
             }
-          })),
-          { text: prompt }
-        ]
-      };
+          };
+        }
+        // Fallback for raw base64
+        return {
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: img
+          }
+        };
+      });
+
+      parts.push({ text: prompt });
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [contents],
+        contents: { parts },
         config: {
+          systemInstruction,
           responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              firstImpression: { type: "STRING" },
+              bioReview: { type: "STRING" },
+              feedAesthetic: { type: "STRING" },
+              finalScore: { type: "NUMBER" },
+              finalScoreReason: { type: "STRING" },
+              proTips: {
+                type: "ARRAY",
+                items: { type: "STRING" }
+              }
+            },
+            required: ["firstImpression", "bioReview", "feedAesthetic", "finalScore", "finalScoreReason", "proTips"]
+          }
         }
       });
 
@@ -71,7 +97,7 @@ async function startServer() {
       res.json(result);
     } catch (error: any) {
       console.error("Gemini Error:", error);
-      res.status(500).json({ error: "Gagal menganalisis profil IG. Coba lagi nanti." });
+      res.status(500).json({ error: "Gagal menganalisis profil IG. Pastikan gambar yang diupload jelas." });
     }
   });
 
