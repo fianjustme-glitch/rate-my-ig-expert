@@ -10,9 +10,9 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
-// Gemini API Initialization
+// Gemini Initialization
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "",
+  apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',
@@ -24,7 +24,6 @@ const ai = new GoogleGenAI({
 app.post("/api/rate-ig", async (req, res) => {
   try {
     const { images } = req.body;
-
     if (!images || images.length === 0) {
       return res.status(400).json({ error: "No images provided" });
     }
@@ -47,7 +46,7 @@ app.post("/api/rate-ig", async (req, res) => {
       }
     `;
 
-    const parts = images.map((img: string) => {
+    const imageParts = images.map((img: string) => {
       const match = img.match(/^data:([^;]+);base64,(.+)$/);
       if (match) {
         return {
@@ -65,31 +64,25 @@ app.post("/api/rate-ig", async (req, res) => {
       };
     });
 
-    parts.push({ text: prompt });
-
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: [{ parts }],
+      contents: { parts: [...imageParts, { text: prompt }] },
       config: {
         systemInstruction,
         responseMimeType: "application/json",
       }
     });
 
-    const result = JSON.parse(response.text || '{}');
-    res.json(result);
+    const jsonData = JSON.parse(response.text || '{}');
+    res.json(jsonData);
   } catch (error: any) {
     console.error("Gemini Error:", error);
-    res.status(500).json({ error: "Gagal menganalisis profil IG. Coba lagi nanti." });
+    res.status(500).json({ error: "Gagal menganalisis profil IG. Pastikan gambar jelas." });
   }
 });
 
-async function start() {
-  // We use Vite middleware in local development and AI Studio preview
-  // We use static serving ONLY if we are explicitly in production and NOT on Vercel (or Vercel handles it)
-  const isDev = process.env.NODE_ENV !== "production";
-
-  if (isDev) {
+async function startServer() {
+  if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -99,21 +92,16 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res, next) => {
-      // Don't intercept API calls
-      if (req.path.startsWith('/api/')) return next();
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  // Bind to 0.0.0.0 and port 3000 as required by the environment
-  if (process.env.VERCEL !== "1") {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT} [${isDev ? 'DEV' : 'PROD'}]`);
-    });
-  }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
-start();
+startServer();
 
 export default app;
