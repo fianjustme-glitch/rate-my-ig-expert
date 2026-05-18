@@ -85,9 +85,11 @@ app.post("/api/rate-ig", async (req, res) => {
 });
 
 async function start() {
-  const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
-  
-  if (!isProd) {
+  // We use Vite middleware in local development and AI Studio preview
+  // We use static serving ONLY if we are explicitly in production and NOT on Vercel (or Vercel handles it)
+  const isDev = process.env.NODE_ENV !== "production";
+
+  if (isDev) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -97,15 +99,17 @@ async function start() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (req, res, next) => {
+      // Don't intercept API calls
+      if (req.path.startsWith('/api/')) return next();
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  // Only start listening if NOT on Vercel or if explicitly running locally
+  // Bind to 0.0.0.0 and port 3000 as required by the environment
   if (process.env.VERCEL !== "1") {
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Server running on http://localhost:${PORT} [${isDev ? 'DEV' : 'PROD'}]`);
     });
   }
 }
