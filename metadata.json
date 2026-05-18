@@ -1,0 +1,6 @@
+{
+  "name": "Rate My IG - Professional Review",
+  "description": "Dapatkan penilaian mendalam untuk akun Instagram kamu dari kacamata Creative Director, Fotografer, dan IG Expert.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
